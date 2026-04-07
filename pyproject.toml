@@ -3,11 +3,33 @@ name = "excel-explorer"
 version = "0.1.0"
 description = "CLI tool for exploring Excel workbooks — trace formulas, understand model structure, read data"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "PressW LLC", email = "dev@pressw.ai" },
+]
+keywords = ["excel", "xlsx", "cli", "financial-model", "formula", "dependency-graph"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+]
 dependencies = [
     "click>=8.0",
     "openpyxl>=3.1",
     "formulas>=1.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/pressw-llc/excel-explorer"
+Repository = "https://github.com/pressw-llc/excel-explorer"
+Issues = "https://github.com/pressw-llc/excel-explorer/issues"
 
 [dependency-groups]
 dev = [
@@ -27,3 +49,24 @@ packages = ["src/excel_explorer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/excel_explorer/__init__.py:__version__"]
+branch = "main"
+build_command = "uvx --from build pyproject-build --installer uv"
+commit_message = "chore(release): {version}"
+tag_format = "v{version}"
+
+[tool.semantic_release.changelog]
+template_dir = ".github/changelog"
+exclude_commit_patterns = ["chore\\(release\\)"]
+
+[tool.semantic_release.remote]
+type = "github"
+token = { env = "GH_TOKEN" }
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
