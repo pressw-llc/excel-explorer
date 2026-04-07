@@ -1,27 +1,12 @@
-"""Integration tests against real workbooks.
+"""Integration tests against bundled synthetic workbooks.
 
-Skipped unless XLX_TEST_WORKBOOKS env var points at a directory with .xlsx files.
-These tests verify that every command runs without error on real-world workbooks.
+Tests every command against realistic (but fully fabricated) Excel workbooks
+that exercise different patterns: values-only exports, formula-heavy models,
+SUMPRODUCT aggregations, and transaction-level data.
 """
 import pytest
-from pathlib import Path
 from click.testing import CliRunner
 from excel_explorer.cli import cli
-
-
-@pytest.fixture
-def workbooks(real_workbook_dir):
-    """Collect all .xlsx files in the test workbook directory (recursively)."""
-    files = list(Path(real_workbook_dir).rglob("*.xlsx"))
-    if not files:
-        pytest.skip("No .xlsx files found in XLX_TEST_WORKBOOKS directory")
-    return files
-
-
-@pytest.fixture
-def first_workbook(workbooks):
-    """Return the first workbook found (for single-file tests)."""
-    return str(workbooks[0])
 
 
 @pytest.fixture
@@ -29,121 +14,212 @@ def runner():
     return CliRunner()
 
 
-class TestOrientationCommands:
-    def test_overview(self, runner, first_workbook):
-        result = runner.invoke(cli, ["overview", first_workbook])
+# ---------------------------------------------------------------------------
+# Financial Statements (values only, no formulas — like a QBO export)
+# ---------------------------------------------------------------------------
+
+class TestFinancialStatements:
+    def test_overview(self, runner, financial_statements):
+        result = runner.invoke(cli, ["overview", financial_statements])
         assert result.exit_code == 0
-        assert "sheets:" in result.output
+        assert "Balance Sheet" in result.output
+        assert "Income Statement" in result.output
+        assert "sheets: 2" in result.output
 
-    def test_overview_all_workbooks(self, runner, workbooks):
-        """Every workbook should produce a valid overview."""
-        for wb in workbooks:
-            result = runner.invoke(cli, ["overview", str(wb)])
-            assert result.exit_code == 0, f"overview failed for {wb.name}: {result.output}"
-
-    def test_describe_first_sheet(self, runner, first_workbook):
-        """Describe the first sheet of the first workbook."""
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        # Extract first sheet name from overview output
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name from overview")
-        result = runner.invoke(cli, ["describe", first_workbook, sheet_name, "--limit", "10"])
+    def test_describe_balance_sheet(self, runner, financial_statements):
+        result = runner.invoke(cli, ["describe", financial_statements, "Balance Sheet", "--limit", "10"])
         assert result.exit_code == 0
         assert "rows:" in result.output
 
-    def test_named_ranges(self, runner, first_workbook):
-        result = runner.invoke(cli, ["named-ranges", first_workbook])
+    def test_read_range(self, runner, financial_statements):
+        result = runner.invoke(cli, ["read", financial_statements, "Income Statement", "A6:C12"])
+        assert result.exit_code == 0
+        assert "Gross Sales" in result.output
+
+    def test_read_row(self, runner, financial_statements):
+        result = runner.invoke(cli, ["read-row", financial_statements, "Income Statement", "7"])
+        assert result.exit_code == 0
+        assert "Sales-Food" in result.output
+
+    def test_read_col(self, runner, financial_statements):
+        result = runner.invoke(cli, ["read-col", financial_statements, "Balance Sheet", "A", "--limit", "20"])
+        assert result.exit_code == 0
+        assert "Assets" in result.output
+
+    def test_tables(self, runner, financial_statements):
+        result = runner.invoke(cli, ["tables", financial_statements, "Balance Sheet"])
+        assert result.exit_code == 0
+        assert "tables_found:" in result.output
+
+    def test_validate_balance(self, runner, financial_statements):
+        result = runner.invoke(cli, ["validate-balance", financial_statements, "Balance Sheet"])
+        assert result.exit_code == 0
+
+    def test_compare_periods(self, runner, financial_statements):
+        result = runner.invoke(cli, ["compare-periods", financial_statements, "Income Statement", "7"])
+        assert result.exit_code == 0
+        assert "change" in result.output.lower() or "growth" in result.output.lower()
+
+    def test_search(self, runner, financial_statements):
+        result = runner.invoke(cli, ["search", financial_statements, "Sales"])
+        assert result.exit_code == 0
+        assert "Sales" in result.output
+
+    def test_find_formatting(self, runner, financial_statements):
+        result = runner.invoke(cli, ["find-formatting", financial_statements, "Balance Sheet"])
+        assert result.exit_code == 0
+        assert "bold" in result.output
+
+    def test_named_ranges_empty(self, runner, financial_statements):
+        result = runner.invoke(cli, ["named-ranges", financial_statements])
+        assert result.exit_code == 0
+        assert "named_ranges: 0" in result.output or "No named ranges" in result.output
+
+    def test_sheet_flow_no_formulas(self, runner, financial_statements):
+        result = runner.invoke(cli, ["sheet-flow", financial_statements])
+        assert result.exit_code == 0
+        assert "isolated" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Financial Model (formulas, cross-sheet refs, named ranges)
+# ---------------------------------------------------------------------------
+
+class TestFinancialModel:
+    def test_overview(self, runner, financial_model):
+        result = runner.invoke(cli, ["overview", financial_model])
+        assert result.exit_code == 0
+        assert "Assumptions" in result.output
+        assert "Revenue Build" in result.output
+        assert "P&L" in result.output
+
+    def test_named_ranges(self, runner, financial_model):
+        result = runner.invoke(cli, ["named-ranges", financial_model])
+        assert result.exit_code == 0
+        assert "GrowthRate" in result.output or "TaxRate" in result.output or "AvgCheck" in result.output
+
+    def test_read_formulas(self, runner, financial_model):
+        result = runner.invoke(cli, ["read", financial_model, "P&L", "A4:B13", "--formulas"])
+        assert result.exit_code == 0
+        assert "formula:" in result.output or "=" in result.output
+
+    def test_sheet_flow(self, runner, financial_model):
+        result = runner.invoke(cli, ["sheet-flow", financial_model])
+        assert result.exit_code == 0
+        # Assumptions and Revenue Build should be referenced by P&L
+        assert "->" in result.output
+
+    def test_formula_map(self, runner, financial_model):
+        result = runner.invoke(cli, ["formula-map", financial_model, "P&L"])
+        assert result.exit_code == 0
+        assert "pattern" in result.output.lower()
+
+    def test_describe_assumptions(self, runner, financial_model):
+        result = runner.invoke(cli, ["describe", financial_model, "Assumptions"])
+        assert result.exit_code == 0
+        assert "Parameter" in result.output
+
+    def test_summarize_assumptions(self, runner, financial_model):
+        result = runner.invoke(cli, ["summarize-assumptions", financial_model])
+        assert result.exit_code == 0
+        assert "Assumptions" in result.output or "named_ranges" in result.output
+
+    def test_find_anomalies(self, runner, financial_model):
+        result = runner.invoke(cli, ["find-anomalies", financial_model, "P&L"])
+        assert result.exit_code == 0
+        # The fixture has one anomaly cell (H21 is a formula while rest of row is hardcoded)
+
+    def test_find_formatting(self, runner, financial_model):
+        result = runner.invoke(cli, ["find-formatting", financial_model, "Assumptions"])
+        assert result.exit_code == 0
+        # Assumptions has blue fill on input cells
+        assert "fill:" in result.output
+
+    def test_trace(self, runner, financial_model):
+        result = runner.invoke(cli, ["trace", financial_model, "P&L!B13"])
+        assert result.exit_code == 0
+
+    def test_dependents(self, runner, financial_model):
+        result = runner.invoke(cli, ["dependents", financial_model, "Assumptions!B4"])
+        assert result.exit_code == 0
+
+    def test_find_inputs(self, runner, financial_model):
+        result = runner.invoke(cli, ["find-inputs", financial_model])
         assert result.exit_code == 0
 
 
-class TestReadCommands:
-    def test_read_range(self, runner, first_workbook):
-        """Read a small range from the first sheet."""
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name")
-        result = runner.invoke(cli, ["read", first_workbook, sheet_name, "A1:C10"])
-        assert result.exit_code == 0
+# ---------------------------------------------------------------------------
+# Sales Analysis (SUMPRODUCT, named ranges, data sheet)
+# ---------------------------------------------------------------------------
 
-    def test_read_row(self, runner, first_workbook):
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name")
-        result = runner.invoke(cli, ["read-row", first_workbook, sheet_name, "1"])
+class TestSalesAnalysis:
+    def test_overview(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["overview", sales_analysis])
         assert result.exit_code == 0
+        assert "Sales Data" in result.output
+        assert "Store Analysis" in result.output
 
-    def test_read_col(self, runner, first_workbook):
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name")
-        result = runner.invoke(cli, ["read-col", first_workbook, sheet_name, "A", "--limit", "10"])
+    def test_named_ranges(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["named-ranges", sales_analysis])
         assert result.exit_code == 0
+        assert "SaleRevenue" in result.output
+        assert "Region" in result.output
 
-    def test_tables(self, runner, first_workbook):
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name")
-        result = runner.invoke(cli, ["tables", first_workbook, sheet_name])
+    def test_describe_data_sheet(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["describe", sales_analysis, "Sales Data", "--limit", "5"])
+        assert result.exit_code == 0
+        assert "rows:" in result.output
+
+    def test_formula_map(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["formula-map", sales_analysis, "Store Analysis"])
+        assert result.exit_code == 0
+        assert "SUMPRODUCT" in result.output
+
+    def test_search_store(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["search", sales_analysis, "Maple"])
+        assert result.exit_code == 0
+        assert "Maple" in result.output
+
+    def test_search_formulas(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["search", sales_analysis, "SUMPRODUCT", "--formulas"])
+        assert result.exit_code == 0
+        assert "SUMPRODUCT" in result.output
+
+    def test_sheet_flow(self, runner, sales_analysis):
+        result = runner.invoke(cli, ["sheet-flow", sales_analysis])
         assert result.exit_code == 0
 
 
-class TestDependencyCommands:
-    def test_sheet_flow(self, runner, first_workbook):
-        result = runner.invoke(cli, ["sheet-flow", first_workbook])
+# ---------------------------------------------------------------------------
+# OpEx Detail (transactions, vendor parsing, VLOOKUP, summaries)
+# ---------------------------------------------------------------------------
+
+class TestOpExDetail:
+    def test_overview(self, runner, opex_detail):
+        result = runner.invoke(cli, ["overview", opex_detail])
         assert result.exit_code == 0
-        assert "sheets:" in result.output
+        assert "Transactions" in result.output
+        assert "Summary" in result.output
 
-    def test_formula_map(self, runner, first_workbook):
-        """Find a sheet with formulas and run formula-map on it."""
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-            if line.strip().startswith("formulas:"):
-                count = int(line.split("formulas:")[1].strip())
-                if count > 0:
-                    result = runner.invoke(cli, ["formula-map", first_workbook, sheet_name, "--limit", "5"])
-                    assert result.exit_code == 0
-                    return
-        pytest.skip("No sheets with formulas found")
-
-
-class TestSearchCommands:
-    def test_search(self, runner, first_workbook):
-        result = runner.invoke(cli, ["search", first_workbook, "a", "--limit", "5"])
+    def test_describe_transactions(self, runner, opex_detail):
+        result = runner.invoke(cli, ["describe", opex_detail, "Transactions", "--limit", "5"])
         assert result.exit_code == 0
+        assert "rows:" in result.output
 
-    def test_search_formulas(self, runner, first_workbook):
-        result = runner.invoke(cli, ["search", first_workbook, "SUM", "--formulas", "--limit", "5"])
+    def test_formula_map_transactions(self, runner, opex_detail):
+        result = runner.invoke(cli, ["formula-map", opex_detail, "Transactions"])
+        assert result.exit_code == 0
+        assert "TRIM" in result.output
+
+    def test_read_summary(self, runner, opex_detail):
+        result = runner.invoke(cli, ["read", opex_detail, "Summary", "A1:G15"])
         assert result.exit_code == 0
 
-    def test_find_formatting(self, runner, first_workbook):
-        overview = runner.invoke(cli, ["overview", first_workbook])
-        for line in overview.output.splitlines():
-            if line.strip().startswith("- name:"):
-                sheet_name = line.split("- name:")[1].strip()
-                break
-        else:
-            pytest.skip("Could not parse sheet name")
-        result = runner.invoke(cli, ["find-formatting", first_workbook, sheet_name, "--limit", "5"])
+    def test_search_vendor(self, runner, opex_detail):
+        result = runner.invoke(cli, ["search", opex_detail, "Sysco", "--limit", "5"])
+        assert result.exit_code == 0
+        assert "Sysco" in result.output
+
+    def test_tables(self, runner, opex_detail):
+        result = runner.invoke(cli, ["tables", opex_detail, "Summary"])
         assert result.exit_code == 0

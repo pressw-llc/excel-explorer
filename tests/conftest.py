@@ -72,17 +72,30 @@ def empty_workbook(tmp_path):
 
 
 @pytest.fixture
-def real_workbook_dir():
-    """Path to real test workbooks for integration testing.
+def fixtures_dir():
+    """Path to the bundled fixture workbooks."""
+    return Path(__file__).parent / "fixtures"
 
-    Set the XLX_TEST_WORKBOOKS env var to a directory containing .xlsx files.
-    Integration tests are skipped when unset.
-    """
-    import os
-    env_path = os.environ.get("XLX_TEST_WORKBOOKS")
-    if not env_path:
-        pytest.skip("Set XLX_TEST_WORKBOOKS env var to run integration tests")
-    path = Path(env_path)
-    if not path.exists():
-        pytest.skip(f"Test workbook directory not found: {path}")
-    return path
+
+@pytest.fixture
+def financial_statements(fixtures_dir):
+    """QBO-style export: Balance Sheet + Income Statement, values only."""
+    return str(fixtures_dir / "financial_statements.xlsx")
+
+
+@pytest.fixture
+def financial_model(fixtures_dir):
+    """Multi-sheet model with formulas, cross-sheet refs, and named ranges."""
+    return str(fixtures_dir / "financial_model.xlsx")
+
+
+@pytest.fixture
+def sales_analysis(fixtures_dir):
+    """SUMPRODUCT-heavy analysis with a large data sheet and named ranges."""
+    return str(fixtures_dir / "sales_analysis.xlsx")
+
+
+@pytest.fixture
+def opex_detail(fixtures_dir):
+    """Transaction-level expense data with vendor parsing and summaries."""
+    return str(fixtures_dir / "opex_detail.xlsx")
