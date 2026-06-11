@@ -1,6 +1,6 @@
 [project]
 name = "excel-explorer"
-version = "1.0.0"
+version = "0.1.0"
 description = "CLI tool for exploring Excel workbooks — trace formulas, understand model structure, read data"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,8 +58,16 @@ testpaths = ["tests"]
 version_toml = ["pyproject.toml:project.version"]
 version_variables = ["src/excel_explorer/__init__.py:__version__"]
 branch = "main"
-# Runs inside the python-semantic-release Docker container, which has no uv on PATH.
-build_command = "python -m pip install uv build && uv lock && python -m build"
+# Stay on the 0.x line: without this, PSR's first release jumps straight to
+# 1.0.0. With it, a feat bumps 0.0.0 -> 0.1.0 and breaking changes bump the
+# minor (not the major) until you intentionally cut 1.0.0.
+allow_zero_version = true
+major_on_zero = false
+# PSR's Docker action runs this in its own container, so it must NOT produce the
+# distribution artifacts we publish — those would be stranded inside the container.
+# Instead we only refresh uv.lock to match the bumped version (committed via
+# `assets`), and build + publish on the runner after PSR tags (see release.yml).
+build_command = "python -m pip install uv && uv lock"
 assets = ["uv.lock"]
 commit_message = "chore(release): {version}"
 tag_format = "v{version}"

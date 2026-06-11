@@ -48,8 +48,15 @@ jobs:
         with:
           github_token: ${{ secrets.GH_TOKEN }}
 
+      # PSR builds inside its own Docker container, so its artifacts never reach
+      # the runner. Build here, on the runner, from the exact tag PSR just created.
+      - name: Build distribution
+        if: steps.release.outputs.released == 'true'
+        run: |
+          git checkout "${{ steps.release.outputs.tag }}"
+          rm -rf dist
+          uv build
+
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
-        with:
-          packages-dir: dist/
