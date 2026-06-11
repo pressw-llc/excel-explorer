@@ -5,7 +5,25 @@ CLI tool for exploring Excel workbooks. Trace formula dependencies, understand m
 ## Install
 
 ```bash
+# As a standalone CLI tool (recommended)
+uv tool install excel-explorer
+
+# Or with pip
+pip install excel-explorer
+
+# Or run without installing
+uvx --from excel-explorer xlx overview "file.xlsx"
+```
+
+This installs the `xlx` command.
+
+### Development setup
+
+```bash
+git clone https://github.com/pressw-llc/excel-explorer.git
+cd excel-explorer
 uv sync --group dev
+uv run pytest
 ```
 
 ## Usage
@@ -116,37 +134,39 @@ Large workbooks can return a lot of data. Use these flags to page through result
 | `--col-offset N` | 0 | Skip the first N columns before returning results |
 | `--depth N` | 5 | Maximum recursion depth for `trace` and `dependents` |
 
-Example — page through a large sheet in chunks of 100 rows:
+Example — page through a large sheet in chunks of 100 rows (use a bounded
+row range; column-only ranges like `A:Z` are returned column-major and don't
+paginate by row):
 
 ```bash
-xlx read "Financials.xlsx" "Transactions" A:Z --limit 100 --offset 0
-xlx read "Financials.xlsx" "Transactions" A:Z --limit 100 --offset 100
-xlx read "Financials.xlsx" "Transactions" A:Z --limit 100 --offset 200
+xlx read "Financials.xlsx" "Transactions" A1:Z1000 --limit 100 --offset 0
+xlx read "Financials.xlsx" "Transactions" A1:Z1000 --limit 100 --offset 100
+xlx read "Financials.xlsx" "Transactions" A1:Z1000 --limit 100 --offset 200
 ```
 
 ## Output Format
 
-Every command outputs a metadata header followed by `---` and then the body. The header uses a YAML-style `key: value` format and always describes what was returned so agents can make pagination decisions without re-reading.
+Every command outputs a metadata header followed by `---` and then the body. The header uses a YAML-style `key: value` format describing what was returned so agents can make pagination decisions without re-reading. For example, `xlx read`:
 
 ```
-command: read
-file: Financials.xlsx
-sheet: Income Statement
-range: A1:D20
-rows_returned: 20
-rows_total: 147
-offset: 0
-limit: 50
+file: financial_model.xlsx
+sheet: P&L
+range: A1:C5
+showing: rows 1-5 of 5
+truncated: false
 ---
-     A              B          C          D
-1    Line Item      2023       2024       2025
-2    Revenue        1000000    1200000    1450000
-...
+  A1: Profit & Loss Statement
+  A3: Line Item
+  A4: Gross Revenue
+  B4: ='Revenue Build'!B8
+  C4: ='Revenue Build'!C8
+  ...
 ```
 
-Key metadata fields:
+The exact header keys vary by command (`range`, `row`, `column`, `query`, `matches`, ...). The pagination-relevant ones:
 
-- `rows_returned` — number of rows in this response
-- `rows_total` — total rows available (use with `offset` to paginate)
-- `offset` / `limit` — current pagination position
-- `truncated: true` — present when results were cut off; increase `--limit` or advance `--offset`
+- `showing: rows X-Y of Z` — current window and total rows available
+- `truncated: true` — results were cut off; advance `--offset` or increase `--limit`
+- `shown` / `offset` / `limit` — pagination position on search-style commands
+
+Commands that return summaries rather than rows (`overview`, `named-ranges`, `sheet-flow`, `validate-balance`, `trace`, `dependents`) don't paginate and omit these fields.

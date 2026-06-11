@@ -15,14 +15,17 @@ Excel Explorer must be installed. Verify with:
 xlx --help
 ```
 
-If not installed, install from the repository:
+If not installed:
 
 ```bash
-# Option A: install globally
-uv tool install git+https://github.com/pressw-llc/excel-explorer.git
+# Option A: install globally from PyPI
+uv tool install excel-explorer
 
 # Option B: run directly without installing
-uvx --from git+https://github.com/pressw-llc/excel-explorer.git xlx overview "file.xlsx"
+uvx --from excel-explorer xlx overview "file.xlsx"
+
+# Option C: install the latest development version from the repository
+uv tool install git+https://github.com/pressw-llc/excel-explorer.git
 ```
 
 ## Exploration Workflow
@@ -102,7 +105,7 @@ Returns all hardcoded cells that other cells depend on, sorted by impact (most d
 
 ## Pagination
 
-All commands support pagination to avoid overwhelming context windows:
+Data-returning commands support pagination to avoid overwhelming context windows (summary commands like `overview`, `named-ranges`, `sheet-flow`, and `validate-balance` take no pagination flags; `trace`/`dependents` only take `--depth`):
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -112,7 +115,7 @@ All commands support pagination to avoid overwhelming context windows:
 | `--col-offset N` | 0 | Skip first N columns |
 | `--depth N` | 5 | Max recursion for trace/dependents |
 
-Every command returns a metadata header indicating whether results were truncated:
+Paginated commands return a metadata header indicating whether results were truncated:
 
 ```
 file: workbook.xlsx

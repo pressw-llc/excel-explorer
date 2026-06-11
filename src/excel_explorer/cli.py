@@ -1,4 +1,4 @@
-"""Excel Explorer CLI — Click entry point for all 17 commands."""
+"""Excel Explorer CLI — Click entry point for all 18 commands."""
 
 import sys
 import click

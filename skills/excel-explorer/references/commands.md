@@ -1,6 +1,6 @@
 # Excel Explorer Command Reference
 
-Complete reference for all 17 `xlx` commands.
+Complete reference for all 18 `xlx` commands.
 
 ## Orientation Commands
 
