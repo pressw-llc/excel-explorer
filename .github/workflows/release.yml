@@ -15,17 +15,23 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.repository == 'pressw-llc/excel-explorer'
+    # Skip forks and the run re-triggered by semantic-release's own version commit
+    if: github.repository == 'pressw-llc/excel-explorer' && !startsWith(github.event.head_commit.message, 'chore(release)')
     environment: release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          # Never restore the Actions cache on the publish path — a poisoned
+          # cache entry in the default-branch scope would otherwise feed
+          # tampered packages straight into the release build.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -38,12 +44,12 @@ jobs:
 
       - name: Python Semantic Release
         id: release
-        uses: python-semantic-release/python-semantic-release@v9
+        uses: python-semantic-release/python-semantic-release@0dc72ac9058a62054a45f6344c83a423d7f906a8 # v9.21.1
         with:
           github_token: ${{ secrets.GH_TOKEN }}
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           packages-dir: dist/
