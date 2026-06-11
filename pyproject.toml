@@ -1,6 +1,6 @@
 [project]
 name = "excel-explorer"
-version = "0.1.0"
+version = "1.0.0"
 description = "CLI tool for exploring Excel workbooks — trace formulas, understand model structure, read data"
 readme = "README.md"
 requires-python = ">=3.11"
