@@ -2,3 +2,6 @@
 __pycache__/
 *.egg-info/
 dist/
+.pytest_cache/
+.coverage
+.claude/

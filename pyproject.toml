@@ -2,6 +2,7 @@
 name = "excel-explorer"
 version = "0.1.0"
 description = "CLI tool for exploring Excel workbooks — trace formulas, understand model structure, read data"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
@@ -47,6 +48,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/excel_explorer"]
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/excel_explorer", "README.md", "LICENSE", "pyproject.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
@@ -54,7 +58,9 @@ testpaths = ["tests"]
 version_toml = ["pyproject.toml:project.version"]
 version_variables = ["src/excel_explorer/__init__.py:__version__"]
 branch = "main"
-build_command = "uvx --from build pyproject-build --installer uv"
+# Runs inside the python-semantic-release Docker container, which has no uv on PATH.
+build_command = "python -m pip install uv build && uv lock && python -m build"
+assets = ["uv.lock"]
 commit_message = "chore(release): {version}"
 tag_format = "v{version}"
 
