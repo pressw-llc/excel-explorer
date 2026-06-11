@@ -18,6 +18,8 @@ def search(path: str, query: str, formulas: bool = False, limit: int = 50, offse
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
+        if not hasattr(ws, "iter_rows"):  # chartsheets have no cells
+            continue
         for row in ws.iter_rows(max_col=MAX_COLS):
             for cell in row:
                 val = cell.value

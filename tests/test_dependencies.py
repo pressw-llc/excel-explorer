@@ -67,3 +67,68 @@ def test_sheet_flow(tmp_workbook):
     assert "Summary" in result
     assert "Projections" in result
     assert "->" in result
+
+
+def test_sheet_flow_leading_cross_sheet_ref(tmp_path):
+    """A formula that starts with a sheet ref (=Assumptions!B2) must produce an edge."""
+    from openpyxl import Workbook
+
+    path = tmp_path / "leading_ref.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Assumptions"
+    ws["B2"] = 7
+    model = wb.create_sheet("Model")
+    model["A1"] = "=Assumptions!B2"
+    wb.save(path)
+
+    result = sheet_flow(str(path))
+    assert '"Assumptions" -> "Model"' in result
+
+
+def test_trace_cell_does_not_substring_match_longer_refs(tmp_path):
+    """Tracing A1 must not silently resolve to A10 when A1 is not in the graph."""
+    from openpyxl import Workbook
+
+    path = tmp_path / "anchor.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "S1"
+    ws["A10"] = 7
+    ws["A11"] = 3
+    ws["B1"] = "=A10+A11"
+    wb.save(path)
+
+    result = trace_cell(str(path), "S1", "A1")
+    assert "not found" in result
+    assert "A10" not in result
+
+
+def test_sheet_flow_and_overview_skip_chartsheets(tmp_path):
+    """Chartsheets have no cells and must not crash sheet iteration."""
+    from openpyxl import Workbook
+    from openpyxl.chart import BarChart, Reference
+    from excel_explorer.explorer import overview
+    from excel_explorer.search import search
+
+    path = tmp_path / "chart.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws["A1"] = "Revenue"
+    ws["B1"] = 100
+    cs = wb.create_chartsheet()
+    cs.title = "Charts"
+    chart = BarChart()
+    chart.add_data(Reference(ws, min_col=2, min_row=1, max_row=1))
+    cs.add_chart(chart)
+    wb.save(path)
+
+    result = overview(str(path))
+    assert "Charts" in result and "chartsheet" in result
+
+    result = search(str(path), "Revenue")
+    assert "A1" in result
+
+    result = sheet_flow(str(path))
+    assert "Data" in result

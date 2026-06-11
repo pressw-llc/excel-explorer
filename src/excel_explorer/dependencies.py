@@ -54,9 +54,11 @@ def _find_cell_node(dmap, book_name: str, sheet: str, cell: str) -> str | None:
     for node in dmap.nodes:
         if str(node).upper() == target.upper():
             return node
+    # Anchor the cell ref so A1 doesn't match A10/A100 or ranges like A11:B5
+    fallback = re.compile(rf"\]{re.escape(sheet.upper())}'!{re.escape(cell.upper())}(?=$|:)")
     for node in dmap.nodes:
         s = str(node).upper()
-        if f"]{sheet.upper()}'!{cell.upper()}" in s and "file:/" not in s and not s.startswith("="):
+        if fallback.search(s) and "file:/" not in s and not s.startswith("="):
             return node
     return None
 
@@ -120,7 +122,9 @@ def trace_cell(path: str, sheet: str, cell: str, depth: int = 5) -> str:
 
         if str(node) in seen or current_depth >= depth:
             if current_depth >= depth and not is_input:
-                lines.append(f"{prefix}{'    ' if is_last else '\u2502   '}... (max depth)")
+                # Backslash escapes inside f-string expressions are a SyntaxError on 3.11
+                bar = "\u2502   "
+                lines.append(f"{prefix}{'    ' if is_last else bar}... (max depth)")
             return
         seen.add(str(node))
 
@@ -330,13 +334,17 @@ def sheet_flow(path: str) -> str:
 
     for sn in sheets:
         ws = wb[sn]
+        if not hasattr(ws, "iter_rows"):  # chartsheets have no cells
+            continue
         max_row = ws.max_row or 0
         max_col = ws.max_column or 0
         for row in ws.iter_rows(min_row=1, max_row=min(max_row, 10000), max_col=min(max_col, 100)):
             for cell in row:
                 if isinstance(cell.value, str) and cell.value.startswith("="):
                     refs = re.findall(r"'([^']+)'!", cell.value)
-                    refs += re.findall(r"(?<!=)(?<!')(\w+)!", cell.value)
+                    # \b instead of lookbehinds: (?<!=) made =Sheet!A1 match as
+                    # a truncated 'heet', dropping refs at the start of a formula
+                    refs += re.findall(r"\b(\w+)!", cell.value)
                     for ref in refs:
                         ref_clean = ref.strip("'")
                         if ref_clean != sn and ref_clean in sheets:

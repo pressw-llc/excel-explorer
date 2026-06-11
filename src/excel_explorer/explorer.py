@@ -15,6 +15,10 @@ def overview(path: str) -> str:
     lines.append("sheets:")
     for sn in sheets:
         ws = wb[sn]
+        if not hasattr(ws, "iter_rows"):  # chartsheets have no cells
+            lines.append(f"  - name: {sn}")
+            lines.append("    type: chartsheet (no cells)")
+            continue
         max_row = ws.max_row or 0
         max_col = ws.max_column or 0
 

@@ -157,8 +157,12 @@ def compare_periods(
 # ---------------------------------------------------------------------------
 
 def _normalize_formula(val: str) -> str:
-    """Replace row numbers with # to get a structural pattern."""
-    return re.sub(r'([A-Z]+)(\d+)', r'\1#', val)
+    """Replace whole cell references with REF to get a structural pattern.
+
+    Rows are compared cell-to-cell across columns, so column letters must be
+    normalized too — otherwise =B2+B3 and =C2+C3 look like different patterns.
+    """
+    return re.sub(r'\$?[A-Z]{1,3}\$?\d+', 'REF', val)
 
 
 def find_anomalies(path: str, sheet: str, limit: int = 50, offset: int = 0) -> str:
@@ -216,7 +220,9 @@ def find_anomalies(path: str, sheet: str, limit: int = 50, offset: int = 0) -> s
         for col_idx, col_letter, val, (kind, pat) in patterns:
             cell_ref = f"{col_letter}{row_num}"
 
-            if kind == "literal" and formula_count > 0:
+            if kind == "literal" and formula_count > literal_count:
+                # Only flag literals when formulas dominate the row; otherwise
+                # every literal in a mostly-literal row is a false positive
                 # Hardcoded value in a row that's mostly formulas
                 anomalies.append(
                     f"{cell_ref}: hardcoded value ({val!r}) in formula row "

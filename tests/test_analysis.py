@@ -70,3 +70,39 @@ def test_validate_balance(financial_workbook):
 def test_summarize_assumptions(financial_workbook):
     result = summarize_assumptions(str(financial_workbook))
     assert "Assumptions" in result or "assumptions" in result.lower()
+
+
+def test_find_anomalies_detects_cross_column_pattern_break(tmp_path):
+    """Row-wise comparison must normalize column letters: =B2+B3 vs =C2+C3 are the
+    same pattern, while =E2*E3 is a structural break."""
+    path = tmp_path / "pattern_break.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Model"
+    for col in "BCD":
+        ws[f"{col}2"] = 1
+        ws[f"{col}3"] = 2
+        ws[f"{col}5"] = f"={col}2+{col}3"
+    ws["E2"] = 1
+    ws["E3"] = 2
+    ws["E5"] = "=E2*E3"
+    wb.save(path)
+
+    result = find_anomalies(str(path), "Model")
+    assert "E5" in result
+    assert "pattern differs" in result
+
+
+def test_find_anomalies_ignores_literal_majority_rows(tmp_path):
+    """Literals in a mostly-literal row are normal data, not anomalies."""
+    path = tmp_path / "literal_majority.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "S"
+    for col in "BCDEF":
+        ws[f"{col}1"] = 100
+    ws["G1"] = "=B1+C1"
+    wb.save(path)
+
+    result = find_anomalies(str(path), "S")
+    assert "hardcoded value" not in result
